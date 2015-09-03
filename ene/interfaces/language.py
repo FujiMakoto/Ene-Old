@@ -1,15 +1,11 @@
 from abc import ABCMeta, abstractmethod
+from pkg_resources import load_entry_point
 
 
-class LanguageManager:
-    def __init__(self, load_all=True):
-        self.languages = []
-
-    def load(self, language):
-        pass
-
-    def unload(self, language):
-        pass
+class LanguageFactory:
+    @staticmethod
+    def get(language):
+        return load_entry_point('ene', 'ene.interfaces.languages', language)()
 
 
 class LanguageAbstract(metaclass=ABCMeta):
