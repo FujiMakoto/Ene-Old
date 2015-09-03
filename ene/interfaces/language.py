@@ -2,12 +2,30 @@ from abc import ABCMeta, abstractmethod
 
 
 class LanguageManager:
-    pass
+    def __init__(self, load_all=True):
+        self.languages = []
 
+    def load(self, language):
+        pass
 
-class LanguageFactory:
-    pass
+    def unload(self, language):
+        pass
 
 
 class LanguageAbstract(metaclass=ABCMeta):
-    pass
+    @abstractmethod
+    def get_reply(self, message, client, groups=None):
+        pass
+
+    @abstractmethod
+    def load_file(self, file_path):
+        pass
+
+    @abstractmethod
+    def load_directory(self, dir_path):
+        pass
+
+    @property
+    @abstractmethod
+    def file_extensions(self):
+        pass
