@@ -1,0 +1,9 @@
+<!DOCTYPE agentml SYSTEM "https://github.com/FujiMakoto/AgentML">
+
+<agentml version="0.2" xmlns="">
+    <trigger>
+        <pattern>hello [ene]</pattern>
+        <template>Hello!</template>
+        <template>Hi there!</template>
+    </trigger>
+</agentml>
