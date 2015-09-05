@@ -1,3 +1,5 @@
+import logging
+import threading
 from abc import ABCMeta, abstractmethod
 
 
@@ -10,4 +12,10 @@ class ProtocolFactory:
 
 
 class ProtocolAbstract(metaclass=ABCMeta):
-    pass
+    @abstractmethod
+    def start(self):
+        pass
+
+    @abstractmethod
+    def stop(self):
+        pass
