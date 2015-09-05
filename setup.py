@@ -15,7 +15,7 @@ setup(
     ],
     packages=find_packages(),
     entry_points={
-        'ene.interfaces.languages': ['agentml = agentml:AgentMlLanguage']
+        'ene.interfaces.languages': ['agentml = ene.interfaces.languages.agentml:AgentMlLanguage']
     },
-    requires=['agentml']
+    requires=['agentml', 'irc', 'sqlalchemy', 'alembic', 'pymysql', 'venusian', 'voluptuous']
 )
