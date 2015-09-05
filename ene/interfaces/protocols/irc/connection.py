@@ -1,67 +1,89 @@
-from __future__ import unicode_literals
+import time
+import asyncio
+import venusian
 from collections import deque
+from ipaddress import ip_address
 from .dcc import DCCManager
 from .dcc import DCCChat
+from . import config
+from . import utils
+from . import base
 # from .dec import dcc_event
 # from .dec import event
 # from .dec import extend
 # from .dec import plugin
-from . import config
-from . import utils
-from . import rfc
-from . import base
-# from irc3.compat import urlopen
-# from .compat import text_type
-import asyncio
-from asyncio.queues import Queue, QueueFull
-from ipaddress import ip_address
-import venusian
-import time
-
-text_type = str
 
 
-class IrcConnection(asyncio.Protocol):
-    """asyncio protocol to handle an irc connection"""
-
+class IrcProtocol(asyncio.Protocol):
+    """
+    IRC Connection handler
+    """
     def __init__(self):
+        """
+        Initialize a new IRC connection
+        """
         self.transport = None
         self.closed = True
         self.queue = None
 
     def connection_made(self, transport):
+        """
+        AsyncIO connection made event
+        @type   transport:  asyncio.selector_events._SelectorSocketTransport
+        """
         self.transport = transport
         self.closed = False
         self.queue = deque()
 
     def decode(self, data):
+        """
+        Decode data with bot's encoding
+        @type   data:   bytes
+        @rtype:         str
+        """
         """Decode data with bot's encoding"""
         encoding = getattr(self, 'encoding', 'ascii')
         return data.decode(encoding, 'ignore')
 
     def data_received(self, data):
+        """
+        AsyncIO data received event
+        @param  data:   bytes
+        """
         data = self.decode(data)
+
         if self.queue:
             data = self.queue.popleft() + data
         lines = data.split('\r\n')
         self.queue.append(lines.pop(-1))
+
         for line in lines:
             self.factory.dispatch(line)
 
     def encode(self, data):
-        """Encode data with bot's encoding"""
-        if isinstance(data, text_type):
+        """
+        Encode data with bot's encoding
+        @param  data:   str or bytes
+        """
+        if isinstance(data, str):
             data = data.encode(self.encoding)
         return data
 
     def write(self, data):
+        """
+        Write data to the transport stream
+        @param  data:   str or bytes
+        """
         if data is not None:
             data = self.encode(data)
             if not data.endswith(b'\r\n'):
                 data = data + b'\r\n'
             self.transport.write(data)
 
-    def connection_lost(self, exc):  # pragma: no cover
+    def connection_lost(self, exc):
+        """
+        AsyncIO connection lost event
+        """
         self.factory.log.critical('connection lost (%s): %r',
                                   id(self.transport),
                                   exc)
@@ -73,7 +95,10 @@ class IrcConnection(asyncio.Protocol):
             self.factory.loop.call_later(
                 2, self.factory.create_connection)
 
-    def close(self):  # pragma: no cover
+    def close(self):
+        """
+        Close transport stream
+        """
         if not self.closed:
             self.factory.log.critical('closing old transport (%r)',
                                       id(self.transport))
@@ -119,7 +144,7 @@ class Irc(base.IrcObject):
             CHANTYPES='#',
             CHANMODES='eIbq,k,flj,CFLMPQScgimnprstz',
         ),
-        connection=IrcConnection,
+        connection=IrcProtocol,
     )
 
     def __init__(self, *ini, **config):
