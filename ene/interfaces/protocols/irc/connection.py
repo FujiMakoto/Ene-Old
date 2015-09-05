@@ -109,31 +109,32 @@ class IrcProtocol(asyncio.Protocol):
 
 
 class Irc(base.IrcObject):
-    """An IRC bot"""
-
+    """
+    Primary IRC class
+    """
     # _pep8 = [dcc_event, event, extend, plugin, rfc, config]
     venusian = venusian
     venusian_categories = [
-        'irc3',
-        'irc3.dcc',
-        'irc3.extend',
-        'irc3.rfc1459',
-        'irc3.plugins.cron',
-        'irc3.plugins.command',
+        'ene.interfaces.protocols.irc',
+        'ene.interfaces.protocols.irc.dcc',
+        'ene.interfaces.protocols.irc.extend',
+        'ene.interfaces.protocols.irc.rfc1459',
+        'ene.interfaces.protocols.irc.plugins.cron',
+        'ene.interfaces.protocols.irc.plugins.command',
     ]
 
     logging_config = config.LOGGING
 
     defaults = dict(
         base.IrcObject.defaults,
-        nick='irc3',
-        realname='irc3',
+        nick='Ene',
+        realname='Takane',
         userinfo='Irc bot based on irc3 http://irc3.readthedocs.org',
         host='192.168.0.230',
-        url='https://irc3.readthedocs.org/',
+        url='https://github.com/FujiMakoto/Ene',
         passwords={},
         ctcp=dict(
-            version='irc3 {version} - {url}',
+            version='Ene {version} - {url}',
             userinfo='{userinfo}',
             time='{now:%c}',
         ),
@@ -148,16 +149,17 @@ class Irc(base.IrcObject):
     )
 
     def __init__(self, *ini, **config):
+        """
+        Initialize a new IRC instance
+        """
         super(Irc, self).__init__(*ini, **config)
         self._ip = self._dcc = None
-        # auto include the autojoins plugin if needed (for backward compat)
-        if 'autojoins' in self.config and \
-           'irc3.plugins.autojoins' not in self.registry.includes:
-            self.include('irc3.plugins.autojoins')
+        self.protocol = None
 
     @property
     def server_config(self):
-        """return server configuration (rfc rpl 005)::
+        """
+        return server configuration (rfc rpl 005)::
             >>> bot = Irc()
             >>> print(bot.server_config['STATUSMSG'])
             +@
@@ -165,9 +167,16 @@ class Irc(base.IrcObject):
         """
         return self.config.server_config
 
-    def connection_made(self, f):  # pragma: no cover
-        if getattr(self, 'protocol', None):
+    def connection_made(self, f):
+        """
+        Connection made event
+        @type   f:  asyncio.tasks.Task
+        """
+        # Do we need to close a previous connection?
+        if getattr(self, 'protocol'):
             self.protocol.close()
+
+        # Try and set our transport and protocol and re-connect if there is an issue
         try:
             transport, protocol = f.result()
         except Exception as e:
@@ -179,30 +188,46 @@ class Irc(base.IrcObject):
             self.protocol.queue = deque()
             self.protocol.factory = self
             self.protocol.encoding = self.encoding
+
+            # Do we need to send a server password?
             if self.config.get('password'):
                 self._send('PASS {password}'.format(**self.config))
+
+            # Set our identity and nick information
             self.send((
                 'USER {realname} {host} {host} :{userinfo}\r\n'
                 'NICK {nick}\r\n'
             ).format(**self.config))
-            self.notify('connection_made')
+
+            self.notify('connection_made')  # fire connection made events
             self.join('#homestead')
             self.privmsg('#homestead', 'Hello, world!')
 
     def send_line(self, data):
-        """send a line to the server. replace CR by spaces"""
+        """
+        Send a line to the server, replacing any CR's with spaces beforehand
+        @param  data:   str
+        """
         self.send(data.replace('\n', ' ').replace('\r', ' '))
 
     def send(self, data):
-        """send data to the server"""
-        self._send(data)
-
-    def _send(self, data):
+        """
+        Send RAW data to the server
+        @param  data:   str
+        """
         self.protocol.write(data)
         self.dispatch(data, iotype='out')
 
+    # def _send(self, data):
+    #     self.protocol.write(data)
+    #     self.dispatch(data, iotype='out')
+
     def privmsg(self, target, message):
-        """send a privmsg to target"""
+        """
+        Send a PRIVMSG
+        @type   target:     str
+        @type   message:    str
+        """
         if message:
             messages = utils.split_message(message, self.config.max_length)
             if isinstance(target, DCCChat):
@@ -210,10 +235,14 @@ class Irc(base.IrcObject):
                     target.send_line(message)
             elif target:
                 for message in messages:
-                    self.send_line('PRIVMSG %s :%s' % (target, message))
+                    self.send_line(u'PRIVMSG {0:s} :{1:s}'.format(target, message))
 
     def notice(self, target, message):
-        """send a notice to target"""
+        """
+        Send a NOTICE
+        @type   target:     str
+        @type   message:    str
+        """
         if message:
             messages = utils.split_message(message, self.config.max_length)
             if isinstance(target, DCCChat):
@@ -221,133 +250,201 @@ class Irc(base.IrcObject):
                     target.action(message)
             elif target:
                 for message in messages:
-                    self.send_line('NOTICE %s :%s' % (target, message))
+                    self.send_line(u'NOTICE {0:s} :{1:s}'.format(target, message))
 
     def ctcp(self, target, message):
-        """send a ctcp to target"""
+        """
+        Send a CTCP
+        @type   target:     str
+        @type   message:    str
+        """
         if target and message:
             messages = utils.split_message(message, self.config.max_length)
             for message in messages:
-                self.send_line('PRIVMSG %s :\x01%s\x01' % (target, message))
+                self.send_line(u'PRIVMSG {0:s} :\x01{1:s}\x01'.format(target, message))
 
     def ctcp_reply(self, target, message):
-        """send a ctcp reply to target"""
+        """
+        Respond to a CTCP sent to us
+        @type   target:     str
+        @type   message:    str
+        """
         if target and message:
             messages = utils.split_message(message, self.config.max_length)
             for message in messages:
-                self.send_line('NOTICE %s :\x01%s\x01' % (target, message))
+                self.send_line(u'NOTICE {0:s} :\x01{1:s}\x01'.format(target, message))
 
     def mode(self, target, *data):
-        """set user or channel mode"""
-        self.send_line('MODE %s %s' % (target, ' '.join(data)))
+        """
+        Set a user or channel MODE
+        @param  target: User or channel to set a mode on
+        @type   target: str
+        """
+        self.send_line(u'MODE {0:s} {1:s}'.format(target, ' '.join(data)))
 
     def join(self, target):
-        """join a channel"""
+        """
+        Join a channel
+        @param  target: Channel to join (including prefix)
+        @type   target: str
+        """
         password = self.config.passwords.get(
             target.strip(self.server_config['CHANTYPES']))
         if password:
             target += ' ' + password
-        self.send_line('JOIN %s' % target)
+        self.send_line(u'JOIN {0:s}'.format(target))
 
     def part(self, target, reason=None):
-        """quit a channel"""
+        """
+        Part a channel
+        @param  target: Channel to part (including prefix)
+        @type   target: str
+        """
         if reason:
             target += ' :' + reason
-        self.send_line('PART %s' % target)
+        self.send_line(u'PART {0:s}'.format(target))
 
     def kick(self, channel, target, reason=None):
-        """kick target from channel"""
+        """
+        Kick someone from a channel
+        @param  target: User to kick
+        @type   target: str
+        """
         if reason:
             target += ' :' + reason
-        self.send_line('KICK %s %s' % (channel, target))
+        self.send_line(u'KICK {0:s} {1:s}'.format(channel, target))
 
     def invite(self, target, channel):
-        """invite target to a channel"""
-        self.send_line('INVITE %s %s' % (target, channel))
+        """
+        Invite someone to join a channel
+        @param  target: User to invite
+        @type   target: str
+        """
+        self.send_line(u'INVITE {0:s} {1:s}'.format(target, channel))
 
     def topic(self, channel, topic=None):
-        """change or request the topic of a channel"""
+        """
+        Change or request the topic of a channel
+        @type   channel:    str
+        @param  topic:      Either the topic to set, or NONE to request the current topic
+        @type   topic:      str or None
+        """
         if topic:
             channel += ' :' + topic
-        self.send_line('TOPIC %s' % channel)
+        self.send_line(u'TOPIC {0:s}'.format(channel))
 
-    def away(self, message=None):
-        """mark ourself as away"""
-        cmd = 'AWAY'
-        if message:
-            cmd += ' :' + message
+    def away(self, message):
+        """
+        Mark ourselves as away
+        @param  message:    Away message
+        @type   message:    str or None
+        """
+        cmd = u'AWAY :{0:s}'.format(message)
         self.send_line(cmd)
 
-    def unaway(self):
-        """mask ourself as no longer away"""
-        self.away()
+    def back(self):
+        """
+        Mark ourselves as no longer away
+        """
+        self.send_line('AWAY')
 
     def quit(self, reason=None):
-        """disconnect"""
+        """
+        Disconnect from the server
+        @param  reason: An optional reason for quitting
+        @type   reason: str
+        """
         if not reason:
-            reason = 'bye'
-        else:
-            reason = reason
-        self.send_line('QUIT :%s' % reason)
+            reason = 'Quitting'
+
+        self.send_line(u'QUIT :{0:s}'.format(reason))
 
     def get_nick(self):
+        """
+        Get our current nick
+        @rtype: str
+        """
         return self.config.nick
 
     def set_nick(self, nick):
+        """
+        Set our nick
+        @type   nick:   str
+        """
         self.send_line('NICK ' + nick)
 
     nick = property(get_nick, set_nick, doc='nickname get/set')
 
     @property
     def ip(self):
-        """return bot's ip as an ``ip_address`` object"""
+        """
+        Return our IP as an ip_address object
+        @rtype: ip_address
+        """
         if not self._ip:
             if 'ip' in self.config:
                 ip = self.config['ip']
             else:
                 ip = self.protocol.transport.get_extra_info('sockname')[0]
-            ip = ip_address(ip)
-            if ip.version == 4:
-                self._ip = ip
-            else:  # pragma: no cover
-                response = urlopen('http://ipv4.icanhazip.com/')
-                ip = response.read().strip().decode()
-                ip = ip_address(ip)
-                self._ip = ip
+            self._ip = ip_address(ip)
+
         return self._ip
 
     @property
     def dcc(self):
-        """return the :class:`~irc3.dcc.DCCManager`"""
+        """
+        Return the DCCManager instance
+        @rtype: DCCManager
+        """
         if self._dcc is None:
             self._dcc = DCCManager(self)
         return self._dcc
 
     @asyncio.coroutine
     def dcc_chat(self, mask, host=None, port=None):
-        """Open a DCC CHAT whith mask. If host/port are specified then connect
-        to a server. Else create a server"""
-        return self.dcc.create(
-            'chat', mask, host=host, port=port).ready
+        """
+        Open a DCC CHAT. If host/port are specified then connect to a server, otherwise create a server
+        @type   mask:   str
+        @type   host:   str or None
+        @type   port:   int or None
+        """
+
+        return self.dcc.create('chat', mask, host=host, port=port).ready
 
     @asyncio.coroutine
     def dcc_get(self, mask, host, port, filepath, filesize=None):
-        """DCC GET a file from mask. filepath must be an absolute path with an
-        existing directory. filesize is the expected file size."""
-        return self.dcc.create(
-            'get', mask, filepath=filepath, filesize=filesize).ready
+        """
+        DCC GET a file from mask.
+        @type   mask:       str
+        @type   host:       str
+        @type   port:       int
+        @param  filepath:   Absolute path to an existing directory
+        @type   filepath:   str
+        @param  filesize:   The expected file size
+        @type   filesize:   int or None
+        """
+        return self.dcc.create('get', mask, filepath=filepath, filesize=filesize).ready
 
     @asyncio.coroutine
     def dcc_send(self, mask, filepath):
-        """DCC SEND a file to mask. filepath must be an absolute path to
-        existing file"""
+        """
+        DCC SEND a file to mask.
+        @type   mask:       str
+        @param  filepath:   Absolute path to the file to send
+        @type   filepath:   str
+        """
         return self.dcc.create('send', mask, filepath=filepath).ready
 
     @asyncio.coroutine
     def dcc_accept(self, mask, filepath, port, pos):
-        """accept a DCC RESUME for an axisting DCC SEND. filepath is the
-        filename to sent.  port is the port opened on the server.
-        pos is the expected offset"""
+        """
+        Accept a DCC RESUME for an existing DCC SEND.
+        @type   mask:       str
+        @type   filepath:   str
+        @type   port:       int
+        @param  pos:        File transfer offset
+        @type   pos:        int
+        """
         return self.dcc.resume(mask, filepath, port, pos)
 
     def SIGHUP(self):
@@ -359,7 +456,3 @@ class Irc(base.IrcObject):
             self.quit('INT')
             time.sleep(1)
         self.loop.stop()
-
-
-def run(argv=None):
-    return Irc.from_argv(argv)
