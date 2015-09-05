@@ -1,11 +1,7 @@
 # coding: utf-8
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, SmallInteger, String, text
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
-
-
-Base = declarative_base()
-metadata = Base.metadata
+from . import Base
 
 
 class ProtocolIrcChannel(Base):
@@ -34,7 +30,7 @@ class ProtocolIrcNetwork(Base):
     user_id = Column(Integer, index=True)
 
 
-class SystemUser(ProtocolIrcNetwork):
+class SystemUser(Base):
     __tablename__ = 'system_users'
 
     id = Column(ForeignKey('protocol_irc_channels.user_id'), ForeignKey('protocol_irc_networks.user_id'), primary_key=True)
@@ -46,7 +42,7 @@ class SystemUser(ProtocolIrcNetwork):
     ip_address = Column(String(45))
     admin = Column(Integer, server_default=text("'0'"))
 
-    protocol_irc_channel = relationship('ProtocolIrcChannel', uselist=False)
+    # protocol_irc_channel = relationship('ProtocolIrcChannel', uselist=False)
 
 
 class SystemProtocol(Base):
@@ -55,3 +51,4 @@ class SystemProtocol(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), unique=True)
     enabled = Column(Integer, index=True, server_default=text("'0'"))
+
